@@ -10,13 +10,7 @@
 #include <linux/if_packet.h>
 #include <sys/time.h>
 
-#define IF_NAME "mon0"
-
-
-struct beaconPackage {
-    u_int8_t ssid_len;
-    char ssid[0];
-};
+//#define IF_NAME "wlp0s20u1"
 
 
 int createSocket(char *interface);
@@ -27,16 +21,18 @@ int sendBeacon(int socket, char *beacon, uint size);
 
 int main(int argc, char **argv) {
     printf("Send Start\n");
-    int s = createSocket(IF_NAME);
-    uint16_t index = 200;
+//    int s = createSocket(IF_NAME);
+    int s = createSocket(argv[1]);
+    uint16_t index = 0;
     while (1) {
-        for (int i = 1; i < argc; i++) {
+        for (int i = 2; i < argc; i++) {
             uint size = 0;
             char *beacon = createBeacon(argv[i], &size, index);
             sendBeacon(s, beacon, size);
         }
         usleep(100000);
         index += 0x10;
+//        break;
     }
 
     return 0;
@@ -51,7 +47,7 @@ char *createBeacon(char *ssid, uint *size, uint16_t index) {
     gettimeofday(&t, 0);
     uint64_t t_timestamp = ((uint64_t) t.tv_sec) * 1000000 + t.tv_usec;
     for (int i = 0; i < 8; i++)
-        radio_infor_time[i] = (uint8_t) ((t_timestamp >> (i << 3)) & 0xFF);
+        radio_infor_time[i] = (uint8_t) ((t_timestamp >> (i * 8)) & 0xFF);
 
     char radio_infor_tail[] = "\x02\x6c\x09\xa0\x00\xc4\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd3\x28\x9e\x0e\x00\x00\x00\x00\x16\x00\x11\x03\xc9\x00";
 //    char beacon_frame[] = "\x80\x00\x00\x00\xff\xff\xff\xff\xff\xff\x80\x89\x17\x5c\x52\x33\x80\x89\x17\x5c\x52\x33";
@@ -99,11 +95,11 @@ char *createBeacon(char *ssid, uint *size, uint16_t index) {
 int sendBeacon(int socket, char *beacon, uint size) {
     ssize_t send_size = write(socket, beacon, size);
     free(beacon);
-    if(send_size<0){
+    if (send_size < 0) {
         perror("Send GG");
         exit(-1);
     }
-    printf("Send done. %d\n", send_size);
+    printf("Send done. %zi\n", send_size);
 }
 
 int createSocket(char *interface) {
@@ -112,6 +108,7 @@ int createSocket(char *interface) {
         perror("Socket GG");
         exit(-1);
     }
+
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(struct ifreq));
     strncpy(ifr.ifr_ifrn.ifrn_name, interface, sizeof(ifr.ifr_ifrn) - 1);
@@ -132,9 +129,8 @@ int createSocket(char *interface) {
 
     struct packet_mreq pr;
     memset(&pr, 0, sizeof(pr));
-    pr.mr_ifindex = ll.sll_ifindex;
+    pr.mr_ifindex = ifr.ifr_ifindex;
     pr.mr_type = PACKET_MR_PROMISC;
-
     if (setsockopt(ss, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &pr, sizeof(pr)) < 0) {
         perror("Setsockopt GG");
         exit(-1);
